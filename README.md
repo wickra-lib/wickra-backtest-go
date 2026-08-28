@@ -1,18 +1,18 @@
 <p align="center">
-  <a href="https://wickra.org"><img src="https://raw.githubusercontent.com/wickra-lib/.github/main/profile/wickra-banner.webp?v=514" alt="Wickra — streaming-first technical indicators" width="100%"></a>
+  <a href="https://wickra.org"><img src="https://raw.githubusercontent.com/wickra-lib/.github/main/profile/wickra-banner.webp?v=514" alt="Wickra Backtest — backtest and live are byte-identical" width="100%"></a>
 </p>
 
 [![Built on Wickra](https://img.shields.io/badge/built%20on-wickra-3b82f6)](https://github.com/wickra-lib/wickra)
 [![CI](https://raw.githubusercontent.com/wickra-lib/.github/main/profile/badges/wickra-backtest/ci.svg)](https://github.com/wickra-lib/wickra-backtest/actions/workflows/ci.yml)
 [![codecov](https://raw.githubusercontent.com/wickra-lib/.github/main/profile/badges/wickra-backtest/codecov.svg)](https://codecov.io/gh/wickra-lib/wickra-backtest)
 [![Go module](https://raw.githubusercontent.com/wickra-lib/.github/main/profile/badges/wickra-backtest/go.svg)](https://pkg.go.dev/github.com/wickra-lib/wickra-backtest-go)
-[![License: MIT OR Apache-2.0](https://raw.githubusercontent.com/wickra-lib/.github/main/profile/badges/wickra-backtest/license.svg)version](https://github.com/wickra-lib/wickra-backtest/README.md#license)
+[![License: MIT OR Apache-2.0](https://raw.githubusercontent.com/wickra-lib/.github/main/profile/badges/wickra-backtest/license.svg)](https://github.com/wickra-lib/wickra-backtest#license)
 
 # Wickra Backtest — Go
 
 ---
 
-Go binding for the [wickra-backtestversion](https://github.com/wickra-lib/wickra-backtest/README.md) engine. It calls the
+Go binding for the [wickra-backtest](https://github.com/wickra-lib/wickra-backtest) engine. It calls the
 stable **C ABI** through cgo, so the results are byte-identical to the Rust,
 Python, Node.js, WASM, C# and Java bindings: one engine kernel behind every
 language.
@@ -77,6 +77,31 @@ fmt.Println(report) // BacktestReport JSON
 The returned JSON is the same `BacktestReport` as every other binding. An invalid
 spec or mismatched inputs return an `error` wrapping the engine message; no panic
 crosses the FFI boundary.
+
+The same strategy also runs one bar at a time, which is what makes a backtest and
+a live loop the same code path -- swap the slice for a socket and nothing else
+changes:
+
+```go
+bt, err := wickrabacktest.NewStreamingBacktest(spec, 10_000.0)
+if err != nil {
+	return err
+}
+defer bt.Close()
+
+for _, bar := range feed {
+	if err := bt.Step(bar.Open, bar.High, bar.Low, bar.Close, bar.Volume, bar.Time); err != nil {
+		return err
+	}
+}
+report, err := bt.FinishJSON()
+```
+
+`StreamingBacktest` owns a native handle, so `Close` must be called -- normally
+with `defer`. `FinishJSON` also releases it, and `Close` afterwards is a no-op, so
+the two compose. `StepSimple` uses zero volume and the bar index as its
+timestamp, mirroring `RunSimple`. Strategies reading a side feed drive the run
+with `StepJSON`, passing `{"candle": ..., "feeds": ...}` per bar.
 
 ## Documentation
 
